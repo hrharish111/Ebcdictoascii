@@ -1,40 +1,43 @@
-def readninarycatlog(data,remotefileinfo,encoding):
+def read_binary_catalog(data, remotefileinfo, encoding):
     outfile = []
+    
     if not remotefileinfo[0].get("Lrecl"):
-            for i in data:
-                decoded_chunk = decode_ebcic_char(i,encoding)
-                removedspace = decoded_chunk+"\n"
-                outfile.append(removedspace)
+        for i in data:
+            decoded_chunk = decode_ebcdic_char(i, encoding)  # Fixed function name
+            outfile.append(decoded_chunk + "\n")
     else:
-        if remotefileinfo[0].get("Recfm").lower() == "fb":
+        lrecl = int(remotefileinfo[0]["Lrecl"])
+        recfm = remotefileinfo[0].get("Recfm", "").lower()
+
+        if recfm == "fb":
             i = 0
             while i < len(data):
-                chunk = data[i:i+int(remotefileinfo[0]["Lrecl"])]
+                chunk = data[i:i + lrecl]
                 if not chunk:
                     break
-                removedspace = decode_ebcic_char(chunk, encoding) + "\n"
-                outfile.append(removedspace)
-                i += int(remotefileinfo[0]["Lrecl"])
+                outfile.append(decode_ebcdic_char(chunk, encoding) + "\n")
+                i += lrecl
 
-        elif remotefileinfo[0].get("Recfm").lower() == "vb":
-            while True:
-                header = readingbinarymode.read(4)
-                if len(header) < 4:
+        elif recfm == "vb":
+            i = 0
+            while i < len(data):
+                if i + 4 > len(data):  # Ensure we have at least 4 bytes for the header
                     break
-                # record_length = struct.unpack(">H", header[:2])[0]
-                record_length = int.from_bytes(header[:2], "big")
+                record_length = int.from_bytes(data[i:i+2], "big")
                 actual_record_length = record_length - 4
-                if actual_record_length <= 0:
+                if actual_record_length <= 0 or i + 4 + actual_record_length > len(data):
                     break
-                record = readingbinarymode.read(actual_record_length)
-                removedspace = decode_ebcic_char(record, encoding) + "\n"
-                outfile.write(removedspace)
+                record = data[i+4:i+4+actual_record_length]
+                outfile.append(decode_ebcdic_char(record, encoding) + "\n")
+                i += 4 + actual_record_length
+
         else:
             i = 0
             while i < len(data):
-                chunk = data[i: i+ int(remotefileinfo[0]["Lrecl"])]
+                chunk = data[i:i + lrecl]
                 if not chunk:
                     break
-                removedspace = decode_ebcic_char(chunk, encoding) + "\n"
-                outfile.append(removedspace)
-                i+=int(remotefileinfo[0]["Lrecl"])
+                outfile.append(decode_ebcdic_char(chunk, encoding) + "\n")
+                i += lrecl
+
+    return outfile
