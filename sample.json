@@ -1,0 +1,28 @@
+{
+  "description": "convert packed decimal to readable",
+  "keyfields": [
+    {
+      "keytype": "recordType",
+      "name": "RECORD_TYPE",
+      "type": "string",
+      "size": 2
+    }
+  ],
+  "layouts": [
+    {
+      "layoutname": "Mainframe_VB_DATA",
+      "layouttype":"fixed",
+      "layout": [
+        {"name":"debcred","type": "string","size":1},
+        {"name":"accno","type": "string","size":10},
+        {"name":"currency","type": "string","size":3},
+        {"name":"name","type": "string","size":35},
+        {"name":"balance","type": "skip","size":17},
+        {"name":"blcdate","type": "string","size":6},
+        {"name":"credlim","type": "skip","size":17},
+        {"name":"blclim","type": "skip","size":17},
+        {"name":"class","type": "string","size":1}
+      ]
+    }
+  ]
+}
