@@ -1,0 +1,72 @@
+-- Step 1: Prepare full row as variant + track source
+WITH all_data AS (
+  SELECT TASK_NAME, TO_VARIANT(*) AS full_row, 'table1' AS source_table, * EXCLUDE (TASK_NAME) AS sample_data
+  FROM table1
+  UNION ALL
+  SELECT TASK_NAME, TO_VARIANT(*) AS full_row, 'table2' AS source_table, * EXCLUDE (TASK_NAME) AS sample_data
+  FROM table2
+),
+
+-- Step 2: Find only mismatched rows (i.e., rows that appear only in one table)
+mismatches AS (
+  SELECT TASK_NAME, full_row
+  FROM all_data
+  GROUP BY TASK_NAME, full_row
+  HAVING COUNT(*) = 1
+),
+
+-- Step 3: Join back to get original rows and which table they came from
+labeled AS (
+  SELECT a.TASK_NAME, a.source_table, a.sample_data
+  FROM mismatches m
+  JOIN all_data a
+    ON m.TASK_NAME = a.TASK_NAME AND m.full_row = a.full_row
+),
+
+-- Step 4: Assign row number to get one sample row per TASK_NAME and source_table
+numbered AS (
+  SELECT *,
+         ROW_NUMBER() OVER (PARTITION BY TASK_NAME, source_table ORDER BY TASK_NAME) AS rn
+  FROM labeled
+),
+
+-- Step 5: Count mismatches per task per table
+counts AS (
+  SELECT TASK_NAME, source_table, COUNT(*) AS mismatch_count
+  FROM labeled
+  GROUP BY TASK_NAME, source_table
+),
+
+-- Step 6: Get one sample row from each side
+samples AS (
+  SELECT TASK_NAME, source_table, sample_data
+  FROM numbered
+  WHERE rn = 1
+)
+
+-- Step 7: Pivot side-by-side
+SELECT
+    COALESCE(c1.TASK_NAME, c2.TASK_NAME) AS TASK_NAME,
+    c1.mismatch_count AS table1_mismatch_count,
+    s1.sample_data AS table1_sample_row,
+    c2.mismatch_count AS table2_mismatch_count,
+    s2.sample_data AS table2_sample_row
+FROM counts c1
+LEFT JOIN counts c2 ON c1.TASK_NAME = c2.TASK_NAME AND c1.source_table = 'table1' AND c2.source_table = 'table2'
+LEFT JOIN samples s1 ON c1.TASK_NAME = s1.TASK_NAME AND c1.source_table = s1.source_table AND s1.source_table = 'table1'
+LEFT JOIN samples s2 ON c1.TASK_NAME = s2.TASK_NAME AND c2.source_table = s2.source_table AND s2.source_table = 'table2'
+WHERE c1.source_table = 'table1'
+
+UNION
+
+SELECT
+    c2.TASK_NAME,
+    c1.mismatch_count,
+    s1.sample_data,
+    c2.mismatch_count,
+    s2.sample_data
+FROM counts c2
+LEFT JOIN counts c1 ON c2.TASK_NAME = c1.TASK_NAME AND c2.source_table = 'table2' AND c1.source_table = 'table1'
+LEFT JOIN samples s1 ON c2.TASK_NAME = s1.TASK_NAME AND s1.source_table = 'table1'
+LEFT JOIN samples s2 ON c2.TASK_NAME = s2.TASK_NAME AND s2.source_table = 'table2'
+WHERE c1.TASK_NAME IS NULL AND c2.source_table = 'table2';
